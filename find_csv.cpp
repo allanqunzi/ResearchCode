@@ -12,7 +12,7 @@
 
 using namespace std;
 
-const bool strict_flag = true; // true: ture on CG pairing;   false: turn off CG pairing
+const bool strict_flag = true; // true: turn on CG pairing;   false: turn off CG pairing
 const string target("GTCT"), target1("TCTG");
 
 
