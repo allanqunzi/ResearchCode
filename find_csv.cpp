@@ -15,7 +15,6 @@ using namespace std;
 const bool strict_flag = true; // true: turn on CG pairing;   false: turn off CG pairing
 const string target("GTCT"), target1("TCTG");
 
-
 //////////   function declarations   ///////////////////
 string & uppercase(string & str);
 void reverse_base(string & str, std::map<char, char> & basepair);
