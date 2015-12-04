@@ -39,7 +39,6 @@ void rdf(std::vector<std::vector<double> > & dist_matrix, double dr, std::vector
 	{
 		for(int j = 0; j < col_num; ++j){
 			if(i == j)continue;
-                        if(int(dist_matrix[i][j]/dr) >= shells_num)cout<<dist_matrix[i][j]<<"***"<<endl;
 			assert(int(dist_matrix[i][j]/dr) < shells_num);
 			rdf[int(dist_matrix[i][j]/dr)] += 1.0;
 		}
@@ -47,16 +46,16 @@ void rdf(std::vector<std::vector<double> > & dist_matrix, double dr, std::vector
 
 	double normalizer = 1.0/(npart * npart * 4.18879 * dr * dr * dr); // 4*Pi/3
 	double tmp;
-        rdf[0] *= normalizer; 
+        rdf[0] *= normalizer;
 	for (int i = 1; i < rdf.size(); ++i)
 	{
 		tmp = 1.0/(3*i*i + 3*i +1);
 		tmp *= normalizer;
-		rdf[i] *= normalizer;		
+		rdf[i] *= normalizer;
 	}
 }
 
-void construct_dist_matrix(std::vector<std::vector<double> > & dist_matrix, 
+void construct_dist_matrix(std::vector<std::vector<double> > & dist_matrix,
 	std::array< Vec<double>, npart > & r, int dimension)
 {
 	double tmp;
@@ -76,10 +75,10 @@ void construct_dist_matrix(std::vector<std::vector<double> > & dist_matrix,
 			}
 			dist_matrix[i][j] = sqrt(dist_matrix[i][j]);
 			dist_matrix[j][i] = dist_matrix[i][j];
-					
+
 		}
 
-		dist_matrix[i][i] = 0.0;	
+		dist_matrix[i][i] = 0.0;
 	}
 }
 
@@ -111,14 +110,10 @@ int main(int argc, char const *argv[])
 
     for(int i=0; i<configs; ++i){
 
-    	if(i > 29900)std::cout<<i<<"----------- 1 "<<std::endl;
-
         for(int j=1;j<=9;j++){
             getline(infile,line);
             //cout<<line<<endl;
         }
-
-        if(i > 29900)std::cout<<i<<"----------- 2 "<<std::endl;
 
         // read each config into r[j][l]
         for(int j=1; j<=npart; ++j){
@@ -134,23 +129,17 @@ int main(int argc, char const *argv[])
          if(i%1000 == 0 && j == npart)std::cout<<i<<"  "<<id<<"  "<<r[j][0]<<",  "<<r[j][1]<<",  "<<r[j][2]<<std::endl;
         }
 
-        if(i > 29900)std::cout<<i<<"----------- 3 "<<std::endl;
-
         if(i%locals_freq == 0){
         	std::fill(local_rdf.begin(), local_rdf.end(), 0.0);
         }
 
-        if(i > 29900)std::cout<<i<<"----------- 4 "<<std::endl;
         if((i%locals_freq) < rdf_average){
         	construct_dist_matrix(DistMatrix, r, dim);
-        	if(i > 29900)std::cout<<i<<"----------- 5 "<<std::endl;
         	rdf(DistMatrix, dR, single_rdf);
-        	if(i > 29900)std::cout<<i<<"----------- 6 "<<std::endl;
         	for (int k = 0; k < single_rdf.size(); ++k)
         	{
         		local_rdf[k] += single_rdf[k];
         	}
-        	if(i > 29900)std::cout<<i<<"----------- 7 "<<std::endl;
 
         	if((i%locals_freq) == (rdf_average-1)){
         		//cout<<"----------------"<<endl;
@@ -158,20 +147,12 @@ int main(int argc, char const *argv[])
 	        	{
 	        		local_rdf[k] /= rdf_average;
 	        	}
-	        	if(i > 29900)std::cout<<i<<"----------- 8 "<<std::endl;
-
         		string fname = output_folder + std::to_string(i - rdf_average +1) + ".dat";
         		save_rdf(fname, local_rdf, dR);
-        		if(i > 29900)std::cout<<i<<"----------- 9 "<<std::endl;
         	}
         }
 
-        
-
         infile.ignore(10, '\n');
     }
-
-
-	
 	return 0;
 }
