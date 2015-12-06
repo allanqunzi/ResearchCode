@@ -4,6 +4,7 @@
 #include <memory>
 #include <complex>
 #include <cmath>
+#include <cassert>
 #include <string>
 #include <algorithm>
 #include <functional>
@@ -16,13 +17,14 @@ constexpr unsigned dim = 3;
 template<typename T>
 using Vec = std::array<T, dim>;
 
-const string output_folder = "./dsf/";
+const string output_folder  = "./dsf_time_check/";
+const string output_folder2 = "./dsf_fixed/";
 constexpr unsigned middle = 10, head= 4, tail = 4;
 constexpr auto pep  = middle + head + tail;
 constexpr unsigned configs = 30000, chain_num = 100, npart = pep * chain_num;
 constexpr unsigned save_freq = 100, interval = 10;
 constexpr unsigned num_intervals = 2048; // this number should be smaller than configs/interval
-constexpr double time_step = 0.005, dt = time_step * save_freq * interval;
+constexpr double time_step = 0.005, dt = time_step * save_freq * interval, df = 1.00/(dt * num_intervals);
 const double sqrt_npart = sqrt(double(npart));
 constexpr Vec<double> L = {30.0, 30.0, 30.0}; // box size
 constexpr double ave_par_dist = 1.0;
@@ -32,6 +34,8 @@ constexpr Vec<unsigned> max_nk = {  5, //static_cast<unsigned>( (twoPI/ave_par_d
                                     5, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[1] ),
                                     5 //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[2] )
                                   };
+constexpr double max_k = 5 * twoPI/L[1];
+constexpr int max_k_magnitude = int(sqrt( max_k * max_k * 3 ));
 std::unique_ptr< std::array<std::complex<double>, configs> > k[5][5][5];//[max_nk[0]][max_nk[1]][max_nk[2]];
 std::array<std::complex<double>, num_intervals> skt;
 std::array<std::complex<double>, num_intervals> skf;
@@ -62,7 +66,7 @@ void real_to_complex(double * in, std::array<std::complex<double>, out_size> & o
 }
 
 template<typename input_value_type, typename output_value_type, unsigned input_size, unsigned output_size>
-void correlate(int ivl, int num_ivls, int cfgs, double deltat, //ofstream & of,
+void correlate(int ivl, int num_ivls, int cfgs, double deltat, ofstream & of,
     std::array<input_value_type, input_size> & input_data,
     std::array<output_value_type, output_size> & output_data,
     std::function<output_value_type(input_value_type &, input_value_type &)> call_back)
@@ -71,7 +75,9 @@ void correlate(int ivl, int num_ivls, int cfgs, double deltat, //ofstream & of,
 // output_size = num_ivls
 //----------------------------------------------------------------------------
 {
-    for (int i = 1; i < num_ivls; ++i)
+    double rl = 0.0, im = 0.0, ab = 0.0, md = 0.0, ab_temp = 0.0;
+
+    for (int i = 0; i < num_ivls; ++i)
     {
         int dd = i * ivl;
         output_data[i] = output_value_type{};
@@ -82,7 +88,23 @@ void correlate(int ivl, int num_ivls, int cfgs, double deltat, //ofstream & of,
         }
 
         output_data[i] /= output_value_type(cfgs - dd);
-        //of << setw(12) << (dt*i) <<"    "<<setprecision(15)<<output_data[i]<<endl;
+
+        if(i==0){
+            rl = output_data[i].real();
+            im = output_data[i].imag();
+            ab = std::abs(output_data[i]);
+            md = ab*ab;
+         }
+
+         ab_temp = std::abs(output_data[i])/ab;
+
+         if(i != 0){
+            of << setw(12) << (dt*i) <<
+            "    "<<setprecision(15)<<output_data[i].real()/rl<<
+            //"    "<<setprecision(15)<<output_data[i].imag()/im<<
+            "    "<<setprecision(15)<<ab_temp<<
+            "    "<<setprecision(15)<<ab_temp*ab_temp<<endl;
+        }
     }
 
 }
@@ -167,16 +189,23 @@ int main(int argc, char const *argv[])
 
     } // end of loop for each config
 
+
     // calculate the correlation for each k = (kx, ky, kz)
     // dim related loop
     double fftw_real[2*num_intervals];
+    std::vector<std::vector<std::complex<double> > > skt_k_avged(max_k_magnitude+1,
+        std::vector<std::complex<double> >(num_intervals, std::complex<double>{}));
+    std::vector<std::vector<std::complex<double> > > skf_k_avged(max_k_magnitude+1,
+        std::vector<std::complex<double> >(num_intervals, std::complex<double>{}));
+    std::vector<int> counter_k_avged(max_k_magnitude+1, 0);
+
     for (auto l = min_nk[0]; l < max_nk[0]; ++l){
 
     	for (auto m = min_nk[1]; m < max_nk[1]; ++m)
     	{
     		for (auto n = min_nk[2]; n < max_nk[2]; ++n)
     		{
-    			std::string file =  output_folder+"kx_"+std::to_string(l)+"_ky"+std::to_string(m)+"_kz"+std::to_string(n)+"_"
+    			std::string file =  output_folder+"kx"+std::to_string(l)+"_ky"+std::to_string(m)+"_kz"+std::to_string(n)+"_"
 					    			+ std::to_string(dk[0]*l) + "_"
 					    			+ std::to_string(dk[1]*m) + "_"
 					    			+ std::to_string(dk[2]*n) + ".dat";
@@ -185,7 +214,7 @@ int main(int argc, char const *argv[])
                 auto & arr = *(k[l][m][n]);
 
                 correlate<complex, complex, configs, num_intervals>(
-                    interval, num_intervals, configs, dt, //outfile,
+                    interval, num_intervals, configs, dt, outfile,
                     arr, skt,
                     [](complex & c1, complex & c2) ->complex { return c1 * std::conj(c2); }
                     );
@@ -196,6 +225,7 @@ int main(int argc, char const *argv[])
 
                 real_to_complex<num_intervals>(fftw_real, skf);
 
+                /*
                 double df = 1.00/(dt * num_intervals);
                 double skfsq;
                 for (int ii = 0; ii < num_intervals; ++ii)
@@ -203,13 +233,65 @@ int main(int argc, char const *argv[])
                     skfsq = std::abs(skf[ii]);
 
                     outfile<<setw(15)<<setprecision(12)<<(df*ii)<<"   "<<setprecision(15)<<skfsq*skfsq<<std::endl;
-                    
+
                 }
+                */
 
 				outfile.close();
 
+                Vec<double> k_tmp = { l*dk[0], m*dk[1], n*dk[2] };
+                int k_magnitude = int(sqrt(k_tmp * k_tmp));
+                assert(skt_k_avged[k_magnitude].size() == skt.size());
+                ++counter_k_avged[k_magnitude];
+
+                for (int i = 0; i < skt_k_avged[k_magnitude].size(); ++i)
+                {
+                    skt_k_avged[k_magnitude][i] += skt[i];
+                    skf_k_avged[k_magnitude][i] += skf[i];
+                }
+
     		}
     	}
+    }
+
+    double tmp_t, tmp_f;
+    for (int i = 0; i < max_k_magnitude; ++i)
+    {
+        std::string file =  output_folder2+"sk_t_f_fixed_k_"+std::to_string(i)+".dat";
+        ofstream outfile(file.c_str(), ios::out);
+
+        skt_k_avged[i][0] /= double(counter_k_avged[i]);
+        skf_k_avged[i][0] /= double(counter_k_avged[i]);
+
+        tmp_t = std::abs(skt_k_avged[i][0]);
+        tmp_f = std::abs(skf_k_avged[i][0]);
+        tmp_t *= tmp_t;
+        tmp_f *= tmp_f;
+
+        for (int j = 1; j < skt_k_avged[0].size(); ++j)
+        {
+            skt_k_avged[i][j] /= double(counter_k_avged[i]);
+            skf_k_avged[i][j] /= double(counter_k_avged[i]);
+            outfile<<
+            setw(15)<<setprecision(12)<< dt*j << "  " << (std::pow(std::abs(skt_k_avged[i][j]), 2)/tmp_t) <<"  "<<
+            setw(15)<<setprecision(12)<< df*j << "  " << (std::pow(std::abs(skf_k_avged[i][j]), 2)/tmp_f) <<"  "<<
+            setw(15)<<setprecision(12)<< std::abs(skf_k_avged[i][j])/sqrt(tmp_f) << std::endl;
+        }
+        outfile.close();
+    }
+
+    for(int i = 0; i < skt_k_avged[0].size(); ++i)
+    {
+        std::string file =  output_folder2+"sk_t_f_fixed_t_or_f_"+std::to_string(i*dt)+"_"+std::to_string(i*df)+".dat";
+        ofstream outfile(file.c_str(), ios::out);
+
+        for (int j = 0; j < max_k_magnitude; ++j)
+        {
+            outfile<<
+            setw(15)<<setprecision(12)<<j<<"  "<< std::abs(skt_k_avged[j][i])<<"   "<<
+            setw(15)<<setprecision(12)<<std::abs(skf_k_avged[j][i])<<std::endl;
+        }
+        outfile.close();
     }
 
     return 0;
