@@ -18,7 +18,8 @@ template<typename T>
 using Vec = std::array<T, dim>;
 
 const string output_folder  = "./dsf_time_check/";
-const string output_folder2 = "./dsf_fixed/";
+const string output_folder2 = "./dsf_fixed_t/";
+const string output_folder3 = "./dsf_fixed_k/";
 constexpr unsigned middle = 10, head= 4, tail = 4;
 constexpr auto pep  = middle + head + tail;
 constexpr unsigned configs = 30000, chain_num = 100, npart = pep * chain_num;
@@ -28,15 +29,15 @@ constexpr double time_step = 0.005, dt = time_step * save_freq * interval, df = 
 const double sqrt_npart = sqrt(double(npart));
 constexpr Vec<double> L = {30.0, 30.0, 30.0}; // box size
 constexpr double ave_par_dist = 1.0;
-const Vec<double> dk = {twoPI/L[0], twoPI/L[1], twoPI/L[2]};
+const Vec<double> dk = {2.0*twoPI/L[0], 2.0*twoPI/L[1], 2.0*twoPI/L[2]};
 const Vec<unsigned> min_nk = {0, 0, 0};
-constexpr Vec<unsigned> max_nk = {  5, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[0] ),
-                                    5, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[1] ),
-                                    5 //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[2] )
+constexpr Vec<unsigned> max_nk = {  20, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[0] ),
+                                    20, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[1] ),
+                                    20 //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[2] )
                                   };
-constexpr double max_k = 5 * twoPI/L[1];
+constexpr double max_k = max_nk[0] * twoPI/L[1];
 constexpr int max_k_magnitude = int(sqrt( max_k * max_k * 3 ));
-std::unique_ptr< std::array<std::complex<double>, configs> > k[5][5][5];//[max_nk[0]][max_nk[1]][max_nk[2]];
+std::unique_ptr< std::array<std::complex<double>, configs> > k[max_nk[0]][max_nk[1]][max_nk[2]];
 std::array<std::complex<double>, num_intervals> skt;
 std::array<std::complex<double>, num_intervals> skf;
 
@@ -66,7 +67,7 @@ void real_to_complex(double * in, std::array<std::complex<double>, out_size> & o
 }
 
 template<typename input_value_type, typename output_value_type, unsigned input_size, unsigned output_size>
-void correlate(int ivl, int num_ivls, int cfgs, double deltat, ofstream & of,
+void correlate(int ivl, int num_ivls, int cfgs, double deltat, //ofstream & of,
     std::array<input_value_type, input_size> & input_data,
     std::array<output_value_type, output_size> & output_data,
     std::function<output_value_type(input_value_type &, input_value_type &)> call_back)
@@ -88,6 +89,7 @@ void correlate(int ivl, int num_ivls, int cfgs, double deltat, ofstream & of,
         }
 
         output_data[i] /= output_value_type(cfgs - dd);
+/*
 
         if(i==0){
             rl = output_data[i].real();
@@ -105,6 +107,7 @@ void correlate(int ivl, int num_ivls, int cfgs, double deltat, ofstream & of,
             "    "<<setprecision(15)<<ab_temp<<
             "    "<<setprecision(15)<<ab_temp*ab_temp<<endl;
         }
+*/
     }
 
 }
@@ -209,12 +212,12 @@ int main(int argc, char const *argv[])
 					    			+ std::to_string(dk[0]*l) + "_"
 					    			+ std::to_string(dk[1]*m) + "_"
 					    			+ std::to_string(dk[2]*n) + ".dat";
-				ofstream outfile(file.c_str(), ios::out);
+				//ofstream outfile(file.c_str(), ios::out);
                 using complex = std::complex<double>;
                 auto & arr = *(k[l][m][n]);
 
                 correlate<complex, complex, configs, num_intervals>(
-                    interval, num_intervals, configs, dt, outfile,
+                    interval, num_intervals, configs, dt, //outfile,
                     arr, skt,
                     [](complex & c1, complex & c2) ->complex { return c1 * std::conj(c2); }
                     );
@@ -237,7 +240,7 @@ int main(int argc, char const *argv[])
                 }
                 */
 
-				outfile.close();
+				//outfile.close();
 
                 Vec<double> k_tmp = { l*dk[0], m*dk[1], n*dk[2] };
                 int k_magnitude = int(sqrt(k_tmp * k_tmp));
@@ -255,9 +258,9 @@ int main(int argc, char const *argv[])
     }
 
     double tmp_t, tmp_f;
-    for (int i = 0; i < max_k_magnitude; ++i)
+    for (int i = 0; i <= max_k_magnitude; ++i)
     {
-        std::string file =  output_folder2+"sk_t_f_fixed_k_"+std::to_string(i)+".dat";
+        std::string file =  output_folder3+"sk_t_f_fixed_k_"+std::to_string(i)+".dat";
         ofstream outfile(file.c_str(), ios::out);
 
         skt_k_avged[i][0] /= double(counter_k_avged[i]);
@@ -282,16 +285,18 @@ int main(int argc, char const *argv[])
 
     for(int i = 0; i < skt_k_avged[0].size(); ++i)
     {
+      if(i%20 == 0){
         std::string file =  output_folder2+"sk_t_f_fixed_t_or_f_"+std::to_string(i*dt)+"_"+std::to_string(i*df)+".dat";
         ofstream outfile(file.c_str(), ios::out);
 
-        for (int j = 0; j < max_k_magnitude; ++j)
+        for (int j = 0; j <= max_k_magnitude; ++j)
         {
             outfile<<
             setw(15)<<setprecision(12)<<j<<"  "<< std::abs(skt_k_avged[j][i])<<"   "<<
             setw(15)<<setprecision(12)<<std::abs(skf_k_avged[j][i])<<std::endl;
         }
         outfile.close();
+     }
     }
 
     return 0;
