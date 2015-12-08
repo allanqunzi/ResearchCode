@@ -17,9 +17,9 @@ constexpr unsigned dim = 3;
 template<typename T>
 using Vec = std::array<T, dim>;
 
-const string output_folder  = "./dsf_time_check/";
-const string output_folder2 = "./dsf_fixed_t/";
-const string output_folder3 = "./dsf_fixed_k/";
+const string output_folder  = "./dsf_time_check_2/";
+const string output_folder2 = "./dsf_fixed_t_2/";
+const string output_folder3 = "./dsf_fixed_k_2/";
 constexpr unsigned middle = 10, head= 4, tail = 4;
 constexpr auto pep  = middle + head + tail;
 constexpr unsigned configs = 30000, chain_num = 100, npart = pep * chain_num;
@@ -29,14 +29,15 @@ constexpr double time_step = 0.005, dt = time_step * save_freq * interval, df = 
 const double sqrt_npart = sqrt(double(npart));
 constexpr Vec<double> L = {30.0, 30.0, 30.0}; // box size
 constexpr double ave_par_dist = 1.0;
-const Vec<double> dk = {2.0*twoPI/L[0], 2.0*twoPI/L[1], 2.0*twoPI/L[2]};
+constexpr Vec<double> dk = {twoPI/L[0], twoPI/L[1], twoPI/L[2]};
 const Vec<unsigned> min_nk = {0, 0, 0};
-constexpr Vec<unsigned> max_nk = {  20, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[0] ),
-                                    20, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[1] ),
-                                    20 //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[2] )
+constexpr Vec<unsigned> max_nk = {  8, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[0] ),
+                                    8, //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[1] ),
+                                    8 //static_cast<unsigned>( (twoPI/ave_par_dist)/dk[2] )
                                   };
-constexpr double max_k = max_nk[0] * twoPI/L[1];
-constexpr int max_k_magnitude = int(sqrt( max_k * max_k * 3 ));
+constexpr int k_amplifier = 5;
+constexpr double max_k = max_nk[0] * dk[0];
+constexpr int max_k_magnitude = int(sqrt( max_k * max_k * 3 ) * k_amplifier);
 std::unique_ptr< std::array<std::complex<double>, configs> > k[max_nk[0]][max_nk[1]][max_nk[2]];
 std::array<std::complex<double>, num_intervals> skt;
 std::array<std::complex<double>, num_intervals> skf;
@@ -114,6 +115,7 @@ void correlate(int ivl, int num_ivls, int cfgs, double deltat, //ofstream & of,
 
 int main(int argc, char const *argv[])
 {
+std::cout<<"max_k_magnitude "<<max_k_magnitude<<std::endl;
 	ifstream infile("coordinates.txt", ios::in);
 
 	std::array< Vec<double>, npart > r;
@@ -159,6 +161,7 @@ int main(int argc, char const *argv[])
         infile.ignore(10, '\n');
 
         // loop through each k = (kx, ky, kz), dim related loop
+        #pragma omp for schedule(static, 2)
         for (auto l = min_nk[0]; l < max_nk[0]; ++l){
 
 	    	for (auto m = min_nk[1]; m < max_nk[1]; ++m)
@@ -243,7 +246,10 @@ int main(int argc, char const *argv[])
 				//outfile.close();
 
                 Vec<double> k_tmp = { l*dk[0], m*dk[1], n*dk[2] };
-                int k_magnitude = int(sqrt(k_tmp * k_tmp));
+                int k_magnitude = int(sqrt(k_tmp * k_tmp)*k_amplifier );
+                //cout<<"k_magnitude = "<<k_magnitude<<", skt_k_avged[k_magnitude].size() = "<<skt_k_avged[k_magnitude].size()<<std::endl;
+                //cout<<" skt.size() = "<<skt.size()<<endl;
+                assert(k_magnitude <= max_k_magnitude);
                 assert(skt_k_avged[k_magnitude].size() == skt.size());
                 ++counter_k_avged[k_magnitude];
 
@@ -260,7 +266,9 @@ int main(int argc, char const *argv[])
     double tmp_t, tmp_f;
     for (int i = 0; i <= max_k_magnitude; ++i)
     {
-        std::string file =  output_folder3+"sk_t_f_fixed_k_"+std::to_string(i)+".dat";
+        if(counter_k_avged[i] == 0)continue;
+        double tmp_k = double(i)/double(k_amplifier);
+        std::string file =  output_folder3+"sk_t_f_fixed_k_"+std::to_string(tmp_k)+".dat";
         ofstream outfile(file.c_str(), ios::out);
 
         skt_k_avged[i][0] /= double(counter_k_avged[i]);
@@ -291,8 +299,9 @@ int main(int argc, char const *argv[])
 
         for (int j = 0; j <= max_k_magnitude; ++j)
         {
+            if (counter_k_avged[j] == 0)continue;
             outfile<<
-            setw(15)<<setprecision(12)<<j<<"  "<< std::abs(skt_k_avged[j][i])<<"   "<<
+            setw(15)<<setprecision(12)<<double(j)/double(k_amplifier)<<"  "<< std::abs(skt_k_avged[j][i])<<"   "<<
             setw(15)<<setprecision(12)<<std::abs(skf_k_avged[j][i])<<std::endl;
         }
         outfile.close();
